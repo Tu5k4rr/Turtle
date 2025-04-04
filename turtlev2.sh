@@ -352,73 +352,174 @@ install_software() {
     # Check if Homebrew is already installed
     if ! command -v brew &> /dev/null; then
         echo "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-        brew_result=$?
         
-        if [ $brew_result -ne 0 ]; then
-            log_error "Homebrew installation failed"
-            return 1
+        # Ensure XCode Command Line Tools are installed (required for Homebrew)
+        echo "Checking for XCode Command Line Tools..."
+        if ! xcode-select -p &>/dev/null; then
+            echo "XCode Command Line Tools not found. Installing..."
+            # This will prompt the user to install the command line tools
+            xcode-select --install
+            
+            echo "Please wait for XCode Command Line Tools to finish installing"
+            echo "Then press Enter to continue..."
+            read -r
+        else
+            echo "XCode Command Line Tools are already installed."
         fi
         
-        # Add Homebrew to PATH for this session
-        if [ -f /opt/homebrew/bin/brew ]; then
+        # Detect the CPU architecture
+        architecture=$(uname -m)
+        echo "Detected architecture: $architecture"
+        
+        # Install Homebrew with enhanced error handling
+        echo "Installing Homebrew..."
+        
+        # Use a temporary file to capture output and errors
+        BREW_LOG=$(mktemp)
+        echo "Logging to $BREW_LOG"
+        
+        # Run the Homebrew installer
+        if ! /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" &> "$BREW_LOG"; then
+            echo "==== Homebrew installation error ===="
+            cat "$BREW_LOG"
+            echo "====================================="
+            log_error "Homebrew installation failed. See details above."
+            
+            # Check for common issues
+            if grep -q "Command Line Tools" "$BREW_LOG"; then
+                echo "It seems XCode Command Line Tools are required."
+                echo "Please run 'xcode-select --install' and try again after it completes."
+            fi
+            
+            # Clean up
+            rm "$BREW_LOG"
+            
+            # Ask user if they want to continue without Homebrew
+            echo "Would you like to continue with the rest of the script without Homebrew? (y/n)"
+            read -r continue_without_brew
+            if [[ "$continue_without_brew" != "y" ]]; then
+                echo "Exiting as requested."
+                exit 1
+            else
+                echo "Continuing without Homebrew..."
+                return 1
+            fi
+        fi
+        
+        # Clean up
+        rm "$BREW_LOG"
+        
+        # Add Homebrew to PATH for this session based on architecture
+        if [ "$architecture" = "arm64" ] && [ -f /opt/homebrew/bin/brew ]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"
             echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
-            log_success "Homebrew installed and added to PATH"
+            # Also add to bash_profile for good measure
+            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.bash_profile 2>/dev/null
+            log_success "Homebrew installed and added to PATH (Apple Silicon)"
         elif [ -f /usr/local/bin/brew ]; then
             eval "$(/usr/local/bin/brew shellenv)"
             echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zshrc
-            log_success "Homebrew installed and added to PATH"
+            # Also add to bash_profile for good measure
+            echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.bash_profile 2>/dev/null
+            log_success "Homebrew installed and added to PATH (Intel)"
         else
-            log_error "Homebrew installed but can't be found in expected locations"
-            return 1
+            log_error "Homebrew installation appeared to succeed but executable not found in expected locations."
+            echo "Trying to find brew manually..."
+            BREW_PATH=$(find /usr/local /opt -name brew 2>/dev/null | head -n 1)
+            
+            if [ -n "$BREW_PATH" ]; then
+                echo "Found brew at: $BREW_PATH"
+                BREW_DIR=$(dirname "$BREW_PATH")
+                eval "$($BREW_DIR/brew shellenv)"
+                echo "eval \"$($BREW_DIR/brew shellenv)\"" >> ~/.zshrc
+                echo "eval \"$($BREW_DIR/brew shellenv)\"" >> ~/.bash_profile 2>/dev/null
+                log_success "Homebrew found and added to PATH"
+            else
+                echo "Could not find brew executable. You may need to install Homebrew manually."
+                
+                # Ask user if they want to continue without Homebrew
+                echo "Would you like to continue with the rest of the script without Homebrew? (y/n)"
+                read -r continue_without_brew
+                if [[ "$continue_without_brew" != "y" ]]; then
+                    echo "Exiting as requested."
+                    exit 1
+                else
+                    echo "Continuing without Homebrew..."
+                    return 1
+                fi
+            fi
+        fi
+        
+        # Give Homebrew a moment to initialize
+        sleep 2
+        
+        # Update Homebrew
+        echo "Updating Homebrew..."
+        if ! brew update; then
+            log_error "Failed to update Homebrew, but continuing..."
         fi
     else
         log_success "Homebrew is already installed"
+        
+        # Update Homebrew
+        echo "Updating Homebrew..."
+        if ! brew update; then
+            log_error "Failed to update Homebrew, but continuing..."
+        fi
     fi
     
-    # Install Firefox ESR
-    echo "Installing Firefox ESR..."
-    brew install --cask firefox@esr
-    if [ $? -ne 0 ]; then
-        log_error "Firefox ESR installation failed"
+    # Only attempt to install software if Homebrew is available
+    if command -v brew &> /dev/null; then
+        # Install Firefox ESR
+        echo "Installing Firefox ESR..."
+        if ! brew install --cask firefox@esr; then
+            log_error "Firefox ESR installation failed"
+            echo "You may need to install Firefox ESR manually from: https://www.mozilla.org/en-US/firefox/enterprise/"
+        else
+            log_success "Firefox ESR installed"
+        fi
+        
+        # Install Tor Browser and tor
+        echo "Installing Tor Browser..."
+        if ! brew install --cask tor-browser; then
+            log_error "Tor Browser installation failed"
+            echo "You may need to install Tor Browser manually from: https://www.torproject.org/download/"
+        else
+            log_success "Tor Browser installed"
+        fi
+        
+        echo "Installing Tor..."
+        if ! brew install tor; then
+            log_error "Tor installation failed"
+            echo "You can try installing Tor manually if needed"
+        else
+            log_success "Tor installed"
+        fi
+        
+        # Install KeepassXC
+        echo "Installing KeepassXC..."
+        if ! brew install --cask keepassxc; then
+            log_error "KeepassXC installation failed"
+            echo "You may need to install KeepassXC manually from: https://keepassxc.org/download/"
+        else
+            log_success "KeepassXC installed"
+        fi
+        
+        # Install PIA VPN
+        echo "Installing Private Internet Access VPN..."
+        if ! brew install --cask private-internet-access; then
+            log_error "PIA VPN installation failed" 
+            echo "You may need to install PIA VPN manually from: https://www.privateinternetaccess.com/download/"
+        else
+            log_success "PIA VPN installed"
+        fi
     else
-        log_success "Firefox ESR installed"
-    fi
-    
-    # Install Tor Browser and tor
-    echo "Installing Tor Browser..."
-    brew install --cask tor-browser
-    if [ $? -ne 0 ]; then
-        log_error "Tor Browser installation failed"
-    else
-        log_success "Tor Browser installed"
-    fi
-    
-    echo "Installing Tor..."
-    brew install tor
-    if [ $? -ne 0 ]; then
-        log_error "Tor installation failed"
-    else
-        log_success "Tor installed"
-    fi
-    
-    # Install KeepassXC
-    echo "Installing KeepassXC..."
-    brew install --cask keepassxc
-    if [ $? -ne 0 ]; then
-        log_error "KeepassXC installation failed"
-    else
-        log_success "KeepassXC installed"
-    fi
-    
-    # Install PIA VPN
-    echo "Installing Private Internet Access VPN..."
-    brew install --cask private-internet-access
-    if [ $? -ne 0 ]; then
-        log_error "PIA VPN installation failed"
-    else
-        log_success "PIA VPN installed"
+        log_error "Homebrew is not available. Software installation skipped."
+        echo "You may need to install the following software manually:"
+        echo "- Firefox ESR: https://www.mozilla.org/en-US/firefox/enterprise/"
+        echo "- Tor Browser: https://www.torproject.org/download/"
+        echo "- KeepassXC: https://keepassxc.org/download/"
+        echo "- Private Internet Access VPN: https://www.privateinternetaccess.com/download/"
     fi
     
     log_success "Software installation completed"
