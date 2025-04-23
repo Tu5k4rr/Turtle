@@ -10,14 +10,14 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Function to display section headers
-section() {
+# Simple echo function for section headers (more compatible with direct curl execution)
+print_section() {
     echo
     echo "==== $1 ===="
     echo
 }
 
-section "User Account Security"
+print_section "User Account Security"
 # Disable Guest user
 echo "Disabling Guest account..."
 dscl . -delete /Users/Guest AuthenticationAuthority 2>/dev/null
@@ -33,7 +33,7 @@ dscl . -create /Users/root UserShell /usr/bin/false
 echo "Disabling auto login..."
 defaults delete /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null
 
-section "Remote Access Security"
+print_section "Remote Access Security"
 # Disable SSH
 echo "Disabling SSH..."
 systemsetup -setremotelogin off
@@ -42,7 +42,7 @@ systemsetup -setremotelogin off
 echo "Disabling Apple Remote Desktop..."
 /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -stop
 
-section "Screen Saver & Login Security"
+print_section "Screen Saver & Login Security"
 # Require password immediately after screen saver begins
 echo "Configuring screen saver password requirements..."
 defaults -currentHost write com.apple.screensaver askForPassword -int 1
@@ -59,7 +59,7 @@ defaults write /Library/Preferences/com.apple.loginwindow SHOWFULLNAME -bool tru
 # Disable SSH (again, for redundancy)
 systemsetup -setremotelogin off
 
-section "Firewall Configuration"
+print_section "Firewall Configuration"
 # Enable firewall
 echo "Enabling and configuring firewall..."
 /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
@@ -68,12 +68,12 @@ echo "Enabling and configuring firewall..."
 /usr/libexec/ApplicationFirewall/socketfilterfw --setblockall on
 /usr/libexec/ApplicationFirewall/socketfilterfw --setstealthmode on
 
-section "System Integrity Protection"
+print_section "System Integrity Protection"
 # Enable System Integrity Protection
 echo "Enabling System Integrity Protection..."
 csrutil enable
 
-section "Application Security"
+print_section "Application Security"
 # Enable Gatekeeper
 echo "Enabling Gatekeeper..."
 spctl --master-enable
@@ -86,7 +86,7 @@ systemsetup -setremoteappleevents off
 echo "Disabling Bonjour multicast advertisements..."
 defaults write /Library/Preferences/com.apple.mDNSResponder.plist NoMulticastAdvertisements -bool true
 
-section "Software Update Configuration"
+print_section "Software Update Configuration"
 # Enable automatic security updates
 echo "Configuring automatic software updates..."
 defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticCheckEnabled -bool true
@@ -95,7 +95,7 @@ defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstal
 defaults write /Library/Preferences/com.apple.SoftwareUpdate ConfigDataInstall -bool true
 defaults write /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall -bool true
 
-section "Terminal Security"
+print_section "Terminal Security"
 # Enable secure keyboard entry in Terminal
 echo "Enabling secure keyboard entry in Terminal..."
 defaults write -app Terminal SecureKeyboardEntry -bool true
@@ -104,7 +104,7 @@ defaults write -app Terminal SecureKeyboardEntry -bool true
 echo "Configuring Terminal to close on exit..."
 defaults write com.apple.Terminal shellExitAction -int 1
 
-section "Desktop and Dock Security"
+print_section "Desktop and Dock Security"
 # Disable hot corners
 echo "Disabling hot corners..."
 defaults write com.apple.dock wvous-tl-corner -int 0
@@ -116,13 +116,13 @@ defaults write com.apple.dock wvous-br-corner -int 0
 echo "Restarting Dock..."
 killall Dock
 
-section "History and Privacy"
+print_section "History and Privacy"
 # Disable command history
 echo "Disabling command history..."
 echo "HISTSIZE=0" >> ~/.bash_profile
 echo "HISTFILESIZE=0" >> ~/.zshrc
 
-section "Networking Security"
+print_section "Networking Security"
 # Disable NAT
 echo "Disabling NAT..."
 defaults write /Library/Preferences/SystemConfiguration/com.apple.nat NAT -dict Enabled -int 0
@@ -131,7 +131,7 @@ defaults write /Library/Preferences/SystemConfiguration/com.apple.nat NAT -dict 
 echo "Disabling Bluetooth..."
 defaults -currentHost write com.apple.Bluetooth PrefKeyServicesEnabled -bool false
 
-section "Service Disabling"
+print_section "Service Disabling"
 # Disable various services
 echo "Disabling unnecessary services..."
 # Disable Apple Directory Service
@@ -151,7 +151,7 @@ echo "Disabling screen sharing..."
 launchctl disable system/com.apple.screensharing 2>/dev/null
 launchctl bootout system/com.apple.screensharing 2>/dev/null
 
-section "Additional Security Settings"
+print_section "Additional Security Settings"
 # Disable Bluetooth controller
 echo "Disabling Bluetooth controller..."
 defaults write /Library/Preferences/com.apple.Bluetooth ControllerPowerState -bool false 
@@ -169,7 +169,7 @@ defaults write com.apple.NetworkBrowser DisableAirDrop -bool true
 echo "Disabling wake on network access..."
 pmset -a womp 0 
 
-section "Privacy Settings"
+print_section "Privacy Settings"
 # Disable diagnostic data submission
 echo "Disabling diagnostic data submission..."
 defaults write /Library/Preferences/com.apple.SubmitDiagInfo AutoSubmit -bool false
